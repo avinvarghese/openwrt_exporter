@@ -14,7 +14,7 @@ local unpack = unpack or table.unpack
 -- This table defines the scrapers to run.
 -- Each corresponds directly to a scraper_<name> function.
 scrapers = { "cpu", "load_averages", "memory", "file_handles", "network",
-             "network_devices", "time", "uname"}
+             "network_devices", "time", "uname", "nat"}
 
 -- Parsing
 
@@ -198,6 +198,18 @@ function scraper_uname()
   machine_offset = string.len(sysname .. nodename .. release .. version) + 4
   labels['machine'] = string.match(string.sub(uname_string, machine_offset), "(%S+)" )
   metric("node_uname_info", "gauge", labels, 1)
+end
+
+function scraper_nat()
+  local natstat = line_split(get_contents("/proc/net/nf_conntrack"))
+  for i, e in ipairs(natstat) do
+    local src, dest, bytes = string.match(natstat[i], "src=([^ ]+) dst=([^ ]+) .- bytes=([^ ]+)");
+    -- local src, dest, bytes = string.match(natstat[i], "src=([^ ]+) dst=([^ ]+) sport=[^ ]+ dport=[^ ]+ packets=[^ ]+ bytes=([^ ]+)")
+    local labels = { src = src, dest = dest }
+    -- output(string.format("%s\n",e  ))
+    -- output(string.format("src=|%s| dest=|%s| bytes=|%s|", src, dest, bytes  ))
+    metric("node_nat_traffic", "gauge", labels, bytes )
+  end
 end
 
 function timed_scrape(scraper)
