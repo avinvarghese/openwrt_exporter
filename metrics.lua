@@ -201,6 +201,8 @@ function scraper_uname()
 end
 
 function scraper_nat()
+  -- documetation about nf_conntrack: 
+  -- https://www.frozentux.net/iptables-tutorial/chunkyhtml/x1309.html
   local natstat = line_split(get_contents("/proc/net/nf_conntrack"))
   for i, e in ipairs(natstat) do
     local src, dest, bytes = string.match(natstat[i], "src=([^ ]+) dst=([^ ]+) .- bytes=([^ ]+)");
