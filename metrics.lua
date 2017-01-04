@@ -201,7 +201,7 @@ function scraper_uname()
 end
 
 function scraper_nat()
-  -- documetation about nf_conntrack: 
+  -- documetation about nf_conntrack:
   -- https://www.frozentux.net/iptables-tutorial/chunkyhtml/x1309.html
   local natstat = line_split(get_contents("/proc/net/nf_conntrack"))
   nat_metric =  metric("node_nat_traffic", "gauge" )
@@ -235,7 +235,7 @@ function run_all_scrapers()
   local name = "node_exporter_scrape_duration_seconds"
   local duration_metric = metric(name, "summary")
   for i,scraper in ipairs(scrapers) do
-    local labels = {collector=scraper, result="success"} 
+    local labels = {collector=scraper, result="success"}
     duration_metric(labels, times[scraper])
     print_metric(name.."_sum", labels, scrape_time_sums[scraper])
     print_metric(name.."_count", labels, scrape_counts[scraper])
