@@ -204,13 +204,14 @@ function scraper_nat()
   -- documetation about nf_conntrack: 
   -- https://www.frozentux.net/iptables-tutorial/chunkyhtml/x1309.html
   local natstat = line_split(get_contents("/proc/net/nf_conntrack"))
+  nat_metric =  metric("node_nat_traffic", "gauge" )
   for i, e in ipairs(natstat) do
     local src, dest, bytes = string.match(natstat[i], "src=([^ ]+) dst=([^ ]+) .- bytes=([^ ]+)");
     -- local src, dest, bytes = string.match(natstat[i], "src=([^ ]+) dst=([^ ]+) sport=[^ ]+ dport=[^ ]+ packets=[^ ]+ bytes=([^ ]+)")
     local labels = { src = src, dest = dest }
     -- output(string.format("%s\n",e  ))
     -- output(string.format("src=|%s| dest=|%s| bytes=|%s|", src, dest, bytes  ))
-    metric("node_nat_traffic", "gauge", labels, bytes )
+    nat_metric(labels, bytes )
   end
 end
 
