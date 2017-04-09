@@ -14,7 +14,7 @@ local unpack = unpack or table.unpack
 -- This table defines the scrapers to run.
 -- Each corresponds directly to a scraper_<name> function.
 scrapers = { "cpu", "load_averages", "memory", "file_handles", "network",
-             "network_devices", "time", "uname", "nat"}
+             "network_devices", "time", "uname", "nat", "wifi"}
 
 -- Parsing
 
@@ -67,6 +67,57 @@ function metric(name, mtype, labels, value)
     outputter(labels, value)
   end
   return outputter
+end
+
+function scraper_wifi()
+  local rv = { }
+  local ntm = require "luci.model.network".init()
+
+  local dev
+  for _, dev in ipairs(ntm:get_wifidevs()) do
+    local rd = {
+      up       = dev:is_up(),
+      device   = dev:name(),
+      name     = dev:get_i18n(),
+      networks = { }
+    }
+
+    local net
+    for _, net in ipairs(dev:get_wifinets()) do
+      local labels = {
+        channel = net:channel(),
+        ssid = net:active_ssid(),
+        bssid = net:active_bssid(),
+        mode = net:active_mode(),
+        ifname = net:ifname(),
+        country = net:country(),
+        frequency = net:frequency(),
+      }
+      if net:is_up() then
+        metric("wifi_network_up", "gauge", labels, 1)
+        local signal = net:signal_percent()
+        if signal ~= 0 then
+          metric("wifi_network_quality", "gauge", labels, net:signal_percent())
+        end
+        metric("wifi_network_noise", "gauge", labels, net:noise())
+        metric("wifi_network_bitrate", "gauge", labels, net:bitrate())
+
+        local assoclist = net:assoclist()
+        for mac, station in pairs(assoclist) do
+          local labels = {
+            ifname = net:ifname(),
+            mac = mac,
+          }
+          metric("wifi_station_signal", "gauge", labels, station.signal)
+          metric("wifi_station_tx_packets", "gauge", labels, station.tx_packets)
+          metric("wifi_station_rx_packets", "gauge", labels, station.rx_packets)
+        end
+      else
+        metric("wifi_network_up", "gauge", labels, 0)
+      end
+    end
+    rv[#rv+1] = rd
+  end
 end
 
 function scraper_cpu()
