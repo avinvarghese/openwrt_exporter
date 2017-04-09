@@ -2,6 +2,8 @@
 
 USE_PROCD=1
 
+START=60
+
 start_service() {
   procd_open_instance
   procd_set_param command /bin/metrics.lua -p 9100
