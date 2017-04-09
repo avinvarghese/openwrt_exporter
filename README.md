@@ -4,9 +4,9 @@ OpenWrt metrics exporter for Prometheus written in Lua
 at your openwrt box:
 
 ```
-# Install luasocket
+# Install dependencies
 opkg update
-opkg install luasocket
+opkg install luasocket curl ca-certificates luci-base luci-lib-nixio
 
 # copy metrics.lua into /bin/
 curl -o /bin/metrics.lua https://raw.githubusercontent.com/simonswine/openwrt_exporter/master/metrics.lua
