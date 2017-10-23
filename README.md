@@ -1,5 +1,5 @@
 # openwrt_exporter
-A openwrt exporter written in lua.
+A openwrt exporter written in lua and it works in lede-project too!
 
 Example usage
 -------------
