@@ -6,13 +6,13 @@ at your openwrt box:
 ```
 # Install dependencies
 opkg update
-opkg install luasocket curl ca-certificates luci-base luci-lib-nixio
+opkg install luasocket curl ca-certificates luci-base luci-lib-nixio iwinfo
 
 # copy metrics.lua into /bin/
-curl -o /bin/metrics.lua https://raw.githubusercontent.com/simonswine/openwrt_exporter/master/metrics.lua
+curl -o /bin/metrics.lua https://raw.githubusercontent.com/openwrt-exporter/openwrt_exporter/master/metrics.lua
 
 # copy initscript into /etc/init.d/
-curl -o /etc/init.d/openwrt-exporter https://raw.githubusercontent.com/simonswine/openwrt_exporter/master/metrics.initscript
+curl -o /etc/init.d/openwrt-exporter https://raw.githubusercontent.com/openwrt-exporter/openwrt_exporter/master/metrics.initscript
 
 chmod +x /bin/metrics.lua /etc/init.d/openwrt-exporter
 
