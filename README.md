@@ -1,10 +1,25 @@
 # openwrt_exporter
-A openwrt exporter written in lua and it works in lede-project too!
+OpenWrt/LEDE metrics exporter for Prometheus written in Lua
+## Installation
+at your openwrt box:
 
-Example usage
--------------
-1. install luasocket
-2. paste the lua file in your openwrt router and add "lua metrics.lua -p 9100" in /etc/rc.local
+```
+# Install luasocket
+opkg update
+opkg install luasocket
+
+# copy metrics.lua into /bin/
+curl -o /bin/metrics.lua https://raw.githubusercontent.com/rbo/openwrt_exporter/master/metrics.lua
+
+# copy initscript into /etc/init.d/
+curl -o /etc/init.d/openwrt-exporter https://raw.githubusercontent.com/rbo/openwrt_exporter/master/metrics.initscript
+
+chmod +x /bin/metrics.lua /etc/init.d/openwrt-exporter
+
+# start your exporter and enable on boot
+/etc/init.d/openwrt-exporter start
+/etc/init.d/openwrt-exporter enable
+```
 
 Grafana ScreenShoot
 -------------------
