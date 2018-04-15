@@ -14,7 +14,8 @@ local unpack = unpack or table.unpack
 -- This table defines the scrapers to run.
 -- Each corresponds directly to a scraper_<name> function.
 scrapers = { "cpu", "load_averages", "memory", "file_handles", "network",
-             "network_devices", "time", "uname"}
+             "network_devices", "time", "uname", "wifi_clients", "nat_sessions",
+             "uname", "nat", "wifi"}
 
 -- Parsing
 
@@ -45,6 +46,17 @@ function get_contents(filename)
   return contents
 end
 
+function os.capture(cmd, raw)
+  local f = assert(io.popen(cmd, 'r'))
+  local s = assert(f:read('*a'))
+  f:close()
+  if raw then return s end
+  s = string.gsub(s, '^%s+', '')
+  s = string.gsub(s, '%s+$', '')
+  s = string.gsub(s, '[\n\r]+', ' ')
+  return s
+end
+
 -- Metric printing
 
 function print_metric(metric, labels, value)
@@ -67,6 +79,70 @@ function metric(name, mtype, labels, value)
     outputter(labels, value)
   end
   return outputter
+end
+
+function scraper_wifi()
+  local rv = { }
+  local ntm = require "luci.model.network".init()
+
+  local metric_wifi_network_up = metric("wifi_network_up","gauge")
+  local metric_wifi_network_quality = metric("wifi_network_quality","gauge")
+  local metric_wifi_network_bitrate = metric("wifi_network_bitrate","gauge")
+  local metric_wifi_network_noise = metric("wifi_network_noise","gauge")
+  local metric_wifi_network_signal = metric("wifi_network_signal","gauge")
+
+  local metric_wifi_station_signal = metric("wifi_station_signal","gauge")
+  local metric_wifi_station_tx_packets = metric("wifi_station_tx_packets","gauge")
+  local metric_wifi_station_rx_packets = metric("wifi_station_rx_packets","gauge")
+
+  local dev
+  for _, dev in ipairs(ntm:get_wifidevs()) do
+    local rd = {
+      up       = dev:is_up(),
+      device   = dev:name(),
+      name     = dev:get_i18n(),
+      networks = { }
+    }
+
+    local net
+    for _, net in ipairs(dev:get_wifinets()) do
+      local labels = {
+        channel = net:channel(),
+        ssid = net:active_ssid(),
+        bssid = net:active_bssid(),
+        mode = net:active_mode(),
+        ifname = net:ifname(),
+        country = net:country(),
+        frequency = net:frequency(),
+      }
+      if net:is_up() then
+        metric_wifi_network_up(labels, 1)
+        local signal = net:signal_percent()
+        if signal ~= 0 then
+          metric_wifi_network_quality(labels, net:signal_percent())
+        end
+	metric_wifi_network_noise(labels, net:noise())
+	local bitrate = net:bitrate()
+	if bitrate then
+          metric_wifi_network_bitrate(labels, bitrate)
+	end
+
+        local assoclist = net:assoclist()
+        for mac, station in pairs(assoclist) do
+          local labels = {
+            ifname = net:ifname(),
+            mac = mac,
+          }
+          metric_wifi_station_signal(labels, station.signal)
+          metric_wifi_station_tx_packets(labels, station.tx_packets)
+          metric_wifi_station_rx_packets(labels, station.rx_packets)
+        end
+      else
+        metric_wifi_network_up(labels, 0)
+      end
+    end
+    rv[#rv+1] = rd
+  end
 end
 
 function scraper_cpu()
@@ -152,6 +228,26 @@ function scraper_network()
   end
 end
 
+function scraper_wifi_clients()
+  local netdevstat = line_split(get_contents("/proc/net/dev"))
+  local client = {}
+  local labels = {}
+  wifi_metric = metric("wifi_client", "gauge")
+  for i, line in ipairs(netdevstat) do
+    if string.match(netdevstat[i], "wlan") then
+      local cmd = ("iwinfo " .. space_split(netdevstat[i])[1]:gsub(":", "") .. " assoclist  |grep ':[0-Z][0-Z]:'|wc -l")
+      client = os.capture(cmd, false)
+      labels['iface'] = space_split(netdevstat[i])[1]:gsub(":", "")
+      wifi_metric(labels, client)
+    end
+  end
+end
+
+function scraper_nat_sessions()
+  local cmd = ("cat /proc/net/nf_conntrack|wc -l")
+  local result = os.capture(cmd, false)
+  metric("nat_sessions", "gauge", nil, result)
+end
 function scraper_network_devices()
   local netdevstat = line_split(get_contents("/proc/net/dev"))
   local netdevsubstat = {"receive_bytes", "receive_packets", "receive_errs",
@@ -172,7 +268,7 @@ function scraper_network_devices()
     end
   end
   for i, ndss in ipairs(netdevsubstat) do
-    netdev_metric = metric("node_network_" .. ndss, "gauge")
+    netdev_metric = metric("node_network_" .. ndss, "counter")
     for ii, d in ipairs(devs) do
       netdev_metric({device=d}, nds_table[d][i])
     end
@@ -200,6 +296,39 @@ function scraper_uname()
   metric("node_uname_info", "gauge", labels, 1)
 end
 
+function scraper_nat()
+  -- documetation about nf_conntrack:
+  -- https://www.frozentux.net/iptables-tutorial/chunkyhtml/x1309.html
+  local natstat = line_split(get_contents("/proc/net/nf_conntrack"))
+  -- local natstat = line_split(get_contents("nf_conntrack"))
+
+  nat_metric =  metric("node_nat_traffic", "gauge" )
+  for i, e in ipairs(natstat) do
+    -- output(string.format("%s\n",e  ))
+    local fields = space_split(e)
+    local src, dest, bytes;
+    bytes = 0;
+    for ii, field in ipairs(fields) do
+      if src == nil and string.match(field, '^src') then
+        src = string.match(field,"src=([^ ]+)");
+      elseif dest == nil and string.match(field, '^dst') then
+        dest = string.match(field,"dst=([^ ]+)");
+      elseif string.match(field, '^bytes') then
+        local b = string.match(field, "bytes=([^ ]+)");
+        bytes = bytes + b;
+        -- output(string.format("\t%d %s",ii,field  ));
+      end
+
+    end
+    -- local src, dest, bytes = string.match(natstat[i], "src=([^ ]+) dst=([^ ]+) .- bytes=([^ ]+)");
+    -- local src, dest, bytes = string.match(natstat[i], "src=([^ ]+) dst=([^ ]+) sport=[^ ]+ dport=[^ ]+ packets=[^ ]+ bytes=([^ ]+)")
+
+    local labels = { src = src, dest = dest }
+    -- output(string.format("src=|%s| dest=|%s| bytes=|%s|", src, dest, bytes  ))
+    nat_metric(labels, bytes )
+  end
+end
+
 function timed_scrape(scraper)
   local start_time = socket.gettime()
   -- build the function name and call it from global variable table
@@ -220,7 +349,7 @@ function run_all_scrapers()
   local name = "node_exporter_scrape_duration_seconds"
   local duration_metric = metric(name, "summary")
   for i,scraper in ipairs(scrapers) do
-    local labels = {collector=scraper, result="success"} 
+    local labels = {collector=scraper, result="success"}
     duration_metric(labels, times[scraper])
     print_metric(name.."_sum", labels, scrape_time_sums[scraper])
     print_metric(name.."_count", labels, scrape_counts[scraper])
@@ -271,7 +400,7 @@ for i,scraper in ipairs(scrapers) do
 end
 
 if port then
-  server = assert(socket.bind("*", port))
+  server = assert(socket.bind("::", port))
 
   while 1 do
     client = server:accept()
